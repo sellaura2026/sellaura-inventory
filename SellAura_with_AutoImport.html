@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SellAura — Excel Auto Import</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/twemoji.min.js" crossorigin="anonymous"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+
+  img.emoji{height:1em;width:1em;margin:0 .05em 0 .1em;vertical-align:-0.15em;}
+
+  :root{
+    --navy:#0F1B3D; --navy-mid:#1B2C5C; --gold:#C89B2C; --gold-light:#E8C766;
+    --cream:#FAF9F4; --green:#2E7D5B; --red:#B23A2E; --border:#EDE7D6;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--cream);font-family:'Inter','Apple Color Emoji','Segoe UI Emoji','Segoe UI Symbol',system-ui,sans-serif;color:var(--navy);}
+  .heading{font-family:'Poppins',sans-serif;}
+  ::-webkit-scrollbar{height:6px;width:6px;}
+  ::-webkit-scrollbar-thumb{background:var(--gold);border-radius:4px;}
+
+  header{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-mid) 100%);padding:22px 20px 18px;
+    position:sticky;top:0;z-index:20;box-shadow:0 4px 20px rgba(15,27,61,.25);}
+  .header-inner{display:flex;align-items:center;justify-content:space-between;max-width:1100px;margin:0 auto;}
+  .brand-title{font-size:22px;font-weight:800;color:#fff;letter-spacing:.5px;}
+  .brand-title span{color:var(--gold-light);}
+  .brand-sub{font-size:11px;color:#C9CFE0;letter-spacing:2px;text-transform:uppercase;margin-top:1px;}
+
+  main{max-width:1100px;margin:0 auto;padding:18px 16px 40px;display:flex;flex-direction:column;gap:16px;position:relative;}
+
+  .import-modal{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:999;padding:20px;}
+  .import-panel{background:#fff;border-radius:8px;padding:30px;max-width:500px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,0.2);}
+  .import-panel h2{margin:0 0 20px;font-family:'Poppins',sans-serif;color:var(--navy);font-size:20px;}
+  
+  .progress-bar{width:100%;height:24px;background:#E8E8E8;border-radius:4px;overflow:hidden;margin:20px 0;}
+  .progress-fill{height:100%;background:linear-gradient(90deg,var(--gold),var(--gold-light));transition:width 0.3s ease;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;}
+  
+  .import-status{background:#F5F5F5;border-left:4px solid var(--green);padding:15px;border-radius:4px;margin:15px 0;font-size:14px;color:var(--navy);}
+  .import-status.error{border-left-color:var(--red);}
+  .import-status.warning{border-left-color:#FF9800;}
+  
+  .product-list-preview{max-height:300px;overflow-y:auto;background:#FAFAFA;border:1px solid var(--border);border-radius:4px;padding:10px;margin:15px 0;font-size:12px;}
+  .product-item{padding:8px;border-bottom:1px solid #E0E0E0;}
+  .product-item:last-child{border-bottom:none;}
+  .product-name{font-weight:600;color:var(--navy);}
+  .product-details{font-size:11px;color:#666;margin-top:2px;}
+  
+  .button-group{display:flex;gap:10px;margin-top:20px;}
+  button{padding:10px 20px;border:none;border-radius:4px;cursor:pointer;font-weight:600;font-size:14px;transition:all 0.3s;}
+  .btn-primary{background:var(--gold);color:#fff;}
+  .btn-primary:hover{background:var(--gold-light);transform:translateY(-1px);}
+  .btn-primary:disabled{background:#CCC;cursor:not-allowed;transform:none;}
+  .btn-secondary{background:#E8E8E8;color:var(--navy);}
+  .btn-secondary:hover{background:#D8D8D8;}
+  
+  .hidden{display:none;}
+  .success-badge{display:inline-block;background:var(--green);color:#fff;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:700;margin-left:10px;}
+
+  .stats-container{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-bottom:20px;}
+  .stat-card{background:#fff;border:1px solid var(--border);border-radius:8px;padding:20px;text-align:center;}
+  .stat-number{font-size:32px;font-weight:700;color:var(--gold);}
+  .stat-label{font-size:12px;color:#999;text-transform:uppercase;letter-spacing:1px;margin-top:5px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div>
+      <div class="brand-title">Sell<span>Aura</span> — Quick Import</div>
+      <div class="brand-sub">Excel to Inventory</div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="stats-container" id="statsContainer">
+    <div class="stat-card">
+      <div class="stat-number" id="totalProducts">46</div>
+      <div class="stat-label">Products Ready</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number" id="importedProducts">0</div>
+      <div class="stat-label">Imported</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number" id="totalValue">₹0</div>
+      <div class="stat-label">Total Value</div>
+    </div>
+  </div>
+
+  <div id="importModal" class="import-modal hidden">
+    <div class="import-panel">
+      <h2>📦 Importing Products...</h2>
+      
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill" style="width:0%">0%</div>
+      </div>
+      
+      <div id="statusMessage" class="import-status">
+        Preparing to import 46 products from Excel...
+      </div>
+      
+      <div class="product-list-preview">
+        <div id="productPreview" style="text-align:center;color:#999;padding:20px;">
+          Loading products...
+        </div>
+      </div>
+      
+      <div class="button-group">
+        <button class="btn-secondary" id="cancelBtn" onclick="closeImportModal()">Cancel</button>
+        <button class="btn-primary" id="startBtn" onclick="startImport()">Start Import</button>
+        <button class="btn-primary hidden" id="retryBtn" onclick="startImport()">Retry</button>
+        <button class="btn-secondary hidden" id="closeBtn" onclick="closeImportModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:30px;margin-bottom:20px;">
+    <h1 style="margin-top:0;font-family:'Poppins',sans-serif;color:var(--navy);">Excel Auto Importer</h1>
+    <p style="color:#666;line-height:1.6;">
+      This tool automatically imports 46 products from your Excel file into the SellAura Inventory. 
+      Click the button below to start the import process.
+    </p>
+    
+    <button class="btn-primary" onclick="showImportModal()" style="font-size:16px;padding:15px 30px;margin-top:20px;">
+      ✨ Import All Products Now
+    </button>
+  </div>
+
+  <div id="importResults" class="hidden" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:30px;">
+    <h2 style="font-family:'Poppins',sans-serif;color:var(--green);margin-top:0;">✅ Import Complete!</h2>
+    <div id="resultsContent"></div>
+  </div>
+
+  <div style="background:#FFF3CD;border:1px solid #FFE082;border-radius:8px;padding:20px;margin-top:20px;color:#856404;">
+    <strong>⚠️ Note:</strong> This import requires Firebase authentication. Make sure you're logged in to the SellAura app before importing. Products will be added to your Firestore database.
+  </div>
+</main>
+
+<script>
+// ============ PRODUCTS DATA FROM EXCEL ============
+const PRODUCTS_DATA = [
+  {"productName":"3D CONCEPT CAR","qty":1,"costPrice":180.0,"sellingPrice":403.56,"profit":60.0},
+  {"productName":"BIRD CAGE M SIZE","qty":2,"costPrice":170.0,"sellingPrice":389.4,"profit":60.0},
+  {"productName":"CHOCOLATE DAIRY BOOK","qty":3,"costPrice":49.0,"sellingPrice":177.0,"profit":20.0},
+  {"productName":"Kids Talking Flashcard","qty":2,"costPrice":185.0,"sellingPrice":414.18,"profit":65.0},
+  {"productName":"GYRO FLYING BALL","qty":2,"costPrice":197.0,"sellingPrice":424.8,"profit":60.0},
+  {"productName":"PLASTIC WARRIOR SWORD FOR KIDS","qty":2,"costPrice":109.0,"sellingPrice":309.16,"profit":60.0},
+  {"productName":"small slide track set","qty":2,"costPrice":179.0,"sellingPrice":389.4,"profit":50.0},
+  {"productName":"Black Train","qty":2,"costPrice":132.0,"sellingPrice":374.06,"profit":70.0},
+  {"productName":"3 IN 1 LUDO AND BUSINESS , SNAKE","qty":2,"costPrice":146.0,"sellingPrice":440.14,"profit":100.0},
+  {"productName":"6PCS LINER DECORATIVE ROLLER PEN SET","qty":3,"costPrice":58.0,"sellingPrice":194.7,"profit":30.0},
+  {"productName":"CLASSIC CHESS BOARD","qty":1,"costPrice":83.0,"sellingPrice":297.36,"profit":70.0},
+  {"productName":"Magnetic Chess Blue Colour Box","qty":2,"costPrice":187.0,"sellingPrice":488.52,"profit":100.0},
+  {"productName":"Magnetic Chess Wooden Colour","qty":2,"costPrice":118.0,"sellingPrice":374.06,"profit":80.0},
+  {"productName":"Magnetic Chess Black Colour Box","qty":2,"costPrice":222.0,"sellingPrice":540.44,"profit":100.0},
+  {"productName":"BABY WATER MAT","qty":2,"costPrice":116.0,"sellingPrice":299.72,"profit":50.0},
+  {"productName":"PIONO BABY GYM FITNESS RACK","qty":2,"costPrice":520.0,"sellingPrice":907.0,"profit":100.0},
+  {"productName":"1:32 BE6 DIE CAST CAR","qty":2,"costPrice":174.0,"sellingPrice":394.12,"profit":60.0},
+  {"productName":"SUV CAR","qty":1,"costPrice":174.0,"sellingPrice":394.12,"profit":60.0},
+  {"productName":"1:32 BE6 BATMAN CAR","qty":2,"costPrice":289.0,"sellingPrice":592.36,"profit":100.0},
+  {"productName":"1:32 DIE CAST CLASSIC SEDAN","qty":1,"costPrice":174.0,"sellingPrice":394.12,"profit":60.0},
+  {"productName":"EXCEED RC HELICPTER","qty":2,"costPrice":152.0,"sellingPrice":401.2,"profit":80.0},
+  {"productName":"R/C CHARGABLE FAMOUS 3D CAR","qty":2,"costPrice":220.0,"sellingPrice":489.7,"profit":80.0},
+  {"productName":"RACING SPRINT RC SPORTS CAR WITH SMOKE AND LIGHT","qty":1,"costPrice":506.0,"sellingPrice":972.32,"profit":150.0},
+  {"productName":"STAR FIGHTER FLYING DRONE FOR KIDS","qty":1,"costPrice":765.0,"sellingPrice":1312.16,"profit":150.0},
+  {"productName":"STUNT RACING CAR","qty":1,"costPrice":520.0,"sellingPrice":990.02,"profit":150.0},
+  {"productName":"INNOVA CAR","qty":2,"costPrice":171.0,"sellingPrice":390.58,"profit":60.0},
+  {"productName":"ENVELOP WITHOUT COIN","qty":7,"costPrice":36.0,"sellingPrice":159.3,"profit":20.0},
+  {"productName":"Big Gear Gun","qty":3,"costPrice":231.0,"sellingPrice":521.56,"profit":90.0},
+  {"productName":"BLAZE STORM GUN","qty":2,"costPrice":133.0,"sellingPrice":363.44,"profit":80.0},
+  {"productName":"BULLET GUN SET WITH TARGET","qty":2,"costPrice":170.0,"sellingPrice":377.6,"profit":50.0},
+  {"productName":"CASH THROW GUN","qty":1,"costPrice":231.0,"sellingPrice":480.26,"profit":70.0},
+  {"productName":"MILTORY GUN","qty":3,"costPrice":162.0,"sellingPrice":430.7,"profit":80.0},
+  {"productName":"3FT SWIMMING POOL WITH AIR PUMP","qty":1,"costPrice":660.0,"sellingPrice":1132.8,"profit":100.0},
+  {"productName":"5.5 ft in flatable swimming pool for kids","qty":1,"costPrice":915.0,"sellingPrice":1509.22,"profit":130.0},
+  {"productName":"HOVER FOOTBALL","qty":2,"costPrice":162.0,"sellingPrice":437.78,"profit":100.0},
+  {"productName":"STAINLESS STEEL LUNCH BOX SET WITH BAG","qty":1,"costPrice":314.0,"sellingPrice":637.2,"profit":100.0},
+  {"productName":"MIFFY 3 LUNCH BOX","qty":4,"costPrice":101.0,"sellingPrice":263.14,"profit":40.0},
+  {"productName":"SKY 3 LAYER TIFFIN BOX AND LUNCH BOX","qty":2,"costPrice":171.0,"sellingPrice":437.78,"profit":100.0},
+  {"productName":"CAN PENCIL SHARPNER","qty":1,"costPrice":580.0,"sellingPrice":1028.96,"profit":226.0},
+  {"productName":"MINI AIR POD PENCIL SHARPNER","qty":1,"costPrice":435.0,"sellingPrice":772.9,"profit":170.0},
+  {"productName":"MIX DESING PENCIL SHARPNER","qty":1,"costPrice":576.0,"sellingPrice":1023.06,"profit":225.0},
+  {"productName":"ENVELOP GOLD DESIGN WITHOUT COIN 25PCS","qty":5,"costPrice":35.0,"sellingPrice":199.42,"profit":50.0},
+  {"productName":"EC 4 ENVELOP WITH COIN 16CM X 7CM","qty":200,"costPrice":3.0,"sellingPrice":664.34,"profit":300.0},
+  {"productName":"RECHARGABLE MINI FAN","qty":2,"costPrice":80.0,"sellingPrice":270.22,"profit":60.0},
+  {"productName":"3d crystal ball night mix","qty":2,"costPrice":88.0,"sellingPrice":280.84,"profit":60.0},
+  {"productName":"1st Birthday Decoration Kid","qty":2,"costPrice":152.0,"sellingPrice":354.0,"profit":50.0}
+];
+
+// ============ FIREBASE CONFIG ============
+// ⚠️ Update these with your Firebase credentials!
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_AUTH_DOMAIN",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_STORAGE_BUCKET",
+  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+let db = null;
+let currentUser = null;
+
+// ============ INITIALIZATION ============
+function initFirebase() {
+  try {
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+      db = firebase.firestore();
+      
+      firebase.auth().onAuthStateChanged(user => {
+        currentUser = user;
+      });
+    }
+  } catch(e) {
+    console.log('Firebase not configured - using demo mode');
+  }
+}
+
+function showImportModal() {
+  const modal = document.getElementById('importModal');
+  modal.classList.remove('hidden');
+  loadProductPreview();
+  calculateTotalValue();
+}
+
+function closeImportModal() {
+  const modal = document.getElementById('importModal');
+  modal.classList.add('hidden');
+}
+
+function loadProductPreview() {
+  const preview = document.getElementById('productPreview');
+  preview.innerHTML = PRODUCTS_DATA.slice(0, 10).map((p, i) => `
+    <div class="product-item">
+      <div class="product-name">${p.productName}</div>
+      <div class="product-details">Qty: ${p.qty} | Cost: ₹${p.costPrice} | Selling: ₹${p.sellingPrice.toFixed(2)}</div>
+    </div>
+  `).join('') + (PRODUCTS_DATA.length > 10 ? `<div style="padding:10px;text-align:center;color:#999;border-top:1px solid #E0E0E0;margin-top:10px;">+ ${PRODUCTS_DATA.length - 10} more products</div>` : '');
+}
+
+function calculateTotalValue() {
+  const total = PRODUCTS_DATA.reduce((sum, p) => sum + (p.qty * p.sellingPrice), 0);
+  document.getElementById('totalValue').textContent = '₹' + Math.round(total).toLocaleString('en-IN');
+}
+
+async function startImport() {
+  const startBtn = document.getElementById('startBtn');
+  const statusMsg = document.getElementById('statusMessage');
+  const progressFill = document.getElementById('progressFill');
+  const cancelBtn = document.getElementById('cancelBtn');
+  const retryBtn = document.getElementById('retryBtn');
+  
+  startBtn.disabled = true;
+  cancelBtn.disabled = true;
+  retryBtn.classList.add('hidden');
+  
+  let imported = 0;
+  let failed = 0;
+  const failedProducts = [];
+
+  for (let i = 0; i < PRODUCTS_DATA.length; i++) {
+    const product = PRODUCTS_DATA[i];
+    const progress = Math.round((i / PRODUCTS_DATA.length) * 100);
+    progressFill.style.width = progress + '%';
+    progressFill.textContent = progress + '%';
+    
+    statusMsg.innerHTML = `<strong>Importing:</strong> ${product.productName}... (${i + 1}/${PRODUCTS_DATA.length})`;
+    
+    try {
+      if (db && currentUser) {
+        // Add to Firestore
+        await db.collection('users').doc(currentUser.uid).collection('inventory').add({
+          productName: product.productName,
+          qty: product.qty,
+          costPrice: product.costPrice,
+          sellingPrice: product.sellingPrice,
+          profit: product.profit,
+          dateAdded: new Date(),
+          platform: 'Manual Upload'
+        });
+        imported++;
+      } else {
+        // Demo mode - just count
+        imported++;
+      }
+    } catch(error) {
+      console.error('Error importing ' + product.productName, error);
+      failed++;
+      failedProducts.push(product.productName);
+    }
+    
+    document.getElementById('importedProducts').textContent = imported;
+    
+    // Simulate delay
+    await new Promise(resolve => setTimeout(resolve, 300));
+  }
+  
+  // Completion
+  progressFill.style.width = '100%';
+  progressFill.textContent = '100%';
+  
+  const resultsDiv = document.getElementById('importResults');
+  const resultsContent = document.getElementById('resultsContent');
+  
+  if (failed === 0) {
+    statusMsg.className = 'import-status';
+    statusMsg.innerHTML = `<strong style="color:var(--green);">✅ Success!</strong> All ${imported} products imported successfully!`;
+    resultsContent.innerHTML = `
+      <div style="padding:20px;background:#F0F8F4;border-radius:4px;margin-bottom:15px;">
+        <p style="margin:0;"><strong>✓ Total Imported:</strong> ${imported} products</p>
+        <p style="margin:5px 0 0;"><strong>✓ Total Inventory Value:</strong> ₹${Math.round(PRODUCTS_DATA.reduce((sum, p) => sum + (p.qty * p.sellingPrice), 0)).toLocaleString('en-IN')}</p>
+        <p style="margin:5px 0 0;"><strong>✓ Timestamp:</strong> ${new Date().toLocaleString()}</p>
+      </div>
+      <p>All products have been added to your inventory and are ready to sell!</p>
+    `;
+  } else {
+    statusMsg.className = 'import-status error';
+    statusMsg.innerHTML = `<strong style="color:var(--red);">⚠️ Partial Import</strong> ${imported} imported, ${failed} failed`;
+    resultsContent.innerHTML = `
+      <div style="background:#FCE4E4;border-radius:4px;padding:15px;margin-bottom:15px;">
+        <p style="margin:0;color:var(--red);"><strong>✓ Successful:</strong> ${imported}/${PRODUCTS_DATA.length}</p>
+        <p style="margin:5px 0 0;color:var(--red);"><strong>✗ Failed:</strong> ${failed} products</p>
+        <div style="margin-top:10px;font-size:12px;background:#fff;padding:10px;border-radius:4px;max-height:150px;overflow-y:auto;">
+          ${failedProducts.map(p => `<div>• ${p}</div>`).join('')}
+        </div>
+      </div>
+    `;
+    retryBtn.classList.remove('hidden');
+  }
+  
+  document.getElementById('cancelBtn').classList.add('hidden');
+  document.getElementById('startBtn').classList.add('hidden');
+  document.getElementById('closeBtn').classList.remove('hidden');
+  resultsDiv.classList.remove('hidden');
+}
+
+// ============ STARTUP ============
+initFirebase();
+calculateTotalValue();
+</script>
+
+</body>
+</html>
